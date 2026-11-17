@@ -7,6 +7,9 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from core import checks
+from core.models import PermissionLevel
+
 logger = logging.getLogger("Modmail")
 
 HAS_FILE_UPLOAD = hasattr(discord.ui, "FileUpload") and hasattr(discord.ui, "Label")
@@ -109,7 +112,13 @@ class Report(commands.Cog):
         guild = self._guild_obj()
         for menu in self.menus:
             self.bot.tree.add_command(menu, guild=guild)
-        self._sync_task = asyncio.create_task(self._sync())
+        self._sync_task = asyncio.create_task(self._sync_safe())
+
+    async def _sync_safe(self):
+        try:
+            await self._sync()
+        except Exception:
+            pass  # ya registrado en el log por _sync
 
     async def cog_unload(self):
         guild = self._guild_obj()
@@ -119,15 +128,33 @@ class Report(commands.Cog):
             self._sync_task.cancel()
         try:
             await self.bot.tree.sync(guild=guild)
-        except discord.HTTPException:
+        except Exception:
             logger.exception("No se pudo sincronizar los comandos al descargar el plugin de reportes")
 
-    async def _sync(self):
+    async def _sync(self) -> List[str]:
+        """Sincroniza los menús en el servidor y elimina copias globales de versiones anteriores."""
         await self.bot.wait_until_ready()
+        guild = self._guild_obj()
         try:
-            await self.bot.tree.sync(guild=self._guild_obj())
-        except discord.HTTPException:
+            synced = await self.bot.tree.sync(guild=guild)
+            if guild:
+                await self.bot.tree.sync()
+            names = [c.name for c in synced]
+            logger.info("Menús contextuales sincronizados: %s", ", ".join(names) or "ninguno")
+            return names
+        except Exception:
             logger.exception("No se pudo sincronizar los menús contextuales de reportes")
+            raise
+
+    @commands.command()
+    @checks.has_permission(PermissionLevel.OWNER)
+    async def reportsync(self, ctx):
+        """Fuerza la sincronización de los menús contextuales de reportes."""
+        try:
+            names = await self._sync()
+        except Exception as e:
+            return await ctx.send(f"❌ Error al sincronizar: `{e}`")
+        await ctx.send(f"✅ Comandos sincronizados: {', '.join(f'`{n}`' for n in names) or 'ninguno'}")
 
     async def _precheck(self, interaction: discord.Interaction, target_user) -> bool:
         if target_user.id == interaction.user.id:
