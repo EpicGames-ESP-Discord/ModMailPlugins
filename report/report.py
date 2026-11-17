@@ -49,15 +49,19 @@ class ReportModal(discord.ui.Modal):
                 )
             )
         else:
-            self.reason.label = "Razón"
-            self.add_item(self.reason)
             self.links = discord.ui.TextInput(
-                label="Enlaces de evidencia",
                 style=discord.TextStyle.paragraph,
                 required=not self.is_message,
                 max_length=1000,
             )
-            self.add_item(self.links)
+            if hasattr(discord.ui, "Label"):
+                self.add_item(discord.ui.Label(text="Razón", component=self.reason))
+                self.add_item(discord.ui.Label(text="Enlaces de evidencia", component=self.links))
+            else:
+                self.reason.label = "Razón"
+                self.links.label = "Enlaces de evidencia"
+                self.add_item(self.reason)
+                self.add_item(self.links)
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True, thinking=True)
@@ -187,7 +191,7 @@ class Report(commands.Cog):
     async def create_report(self, reporter, target, reason: str, attachments, links: str):
         """Crea (o reutiliza) el thread del reportante y publica el reporte. Devuelve el thread."""
         bot = self.bot
-        if hasattr(bot, "is_blocked") and bot.is_blocked(reporter):
+        if await bot.is_blocked(reporter):
             return None
 
         thread = await bot.threads.find(recipient=reporter)
