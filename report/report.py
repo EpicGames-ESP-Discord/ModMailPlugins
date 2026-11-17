@@ -146,7 +146,7 @@ class Report(commands.Cog):
         if await self._precheck(interaction, message.author):
             await interaction.response.send_modal(ReportModal(self, message))
 
-    def _build_embed(self, reporter, target, reason: str, links: str) -> discord.Embed:
+    def _build_embed(self, reporter, target, reason: str, links: str, include_content: bool = True) -> discord.Embed:
         embed = discord.Embed(title="🚩 Nuevo reporte", description=reason, color=discord.Color.red())
         embed.timestamp = discord.utils.utcnow()
         embed.add_field(name="Reportado por", value=f"{reporter.mention} (`{reporter.id}`)", inline=False)
@@ -157,16 +157,17 @@ class Report(commands.Cog):
             embed.add_field(name="Autor del mensaje", value=f"{author.mention} (`{author.id}`)", inline=True)
             embed.add_field(name="Canal", value=target.channel.mention, inline=True)
             embed.add_field(name="Enlace", value=f"[Ir al mensaje]({target.jump_url})", inline=True)
-            content = target.content or "*Sin contenido de texto*"
-            if len(content) > 1000:
-                content = content[:997] + "..."
-            embed.add_field(name="Contenido", value=content, inline=False)
-            if target.attachments:
-                embed.add_field(
-                    name="Adjuntos del mensaje",
-                    value="\n".join(a.url for a in target.attachments)[:1000],
-                    inline=False,
-                )
+            if include_content:
+                content = target.content or "*Sin contenido de texto*"
+                if len(content) > 1000:
+                    content = content[:997] + "..."
+                embed.add_field(name="Contenido", value=content, inline=False)
+                if target.attachments:
+                    embed.add_field(
+                        name="Adjuntos del mensaje",
+                        value="\n".join(a.url for a in target.attachments)[:1000],
+                        inline=False,
+                    )
             embed.set_thumbnail(url=author.display_avatar.url)
         else:
             embed.add_field(name="Tipo", value="Usuario", inline=True)
@@ -201,8 +202,16 @@ class Report(commands.Cog):
         if thread.channel is None:
             raise RuntimeError("El canal del thread no está disponible")
 
-        embed = self._build_embed(reporter, target, reason, links)
-        await thread.channel.send(embed=embed, files=await self._files(attachments))
+        files = await self._files(attachments)
+        if isinstance(target, discord.Message):
+            await thread.channel.send(embed=self._build_embed(reporter, target, reason, links, False), files=files)
+            try:
+                await target.forward(thread.channel)
+            except discord.HTTPException:
+                logger.warning("No se pudo reenviar el mensaje reportado; se usa el contenido en un embed")
+                await thread.channel.send(embed=self._build_embed(reporter, target, reason, links))
+        else:
+            await thread.channel.send(embed=self._build_embed(reporter, target, reason, links), files=files)
         return thread
 
 
