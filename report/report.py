@@ -147,7 +147,7 @@ class Report(commands.Cog, name="ReportThreads"):
             raise
 
     @commands.command()
-    @checks.has_permission(PermissionLevel.OWNER)
+    @checks.has_permissions(PermissionLevel.OWNER)
     async def reportsync(self, ctx):
         """Fuerza la sincronización de los menús contextuales de reportes."""
         try:
