@@ -93,7 +93,7 @@ class ReportModal(discord.ui.Modal):
             await interaction.response.send_message("❌ Ocurrió un error.", ephemeral=True)
 
 
-class Report(commands.Cog):
+class Report(commands.Cog, name="ReportThreads"):
     """Reporta usuarios o mensajes mediante el menú contextual; crea un thread de Modmail."""
 
     def __init__(self, bot):
@@ -111,7 +111,7 @@ class Report(commands.Cog):
     async def cog_load(self):
         guild = self._guild_obj()
         for menu in self.menus:
-            self.bot.tree.add_command(menu, guild=guild)
+            self.bot.tree.add_command(menu, guild=guild, override=True)
         self._sync_task = asyncio.create_task(self._sync_safe())
 
     async def _sync_safe(self):
